@@ -2806,11 +2806,29 @@ program
         console.log(chalk.green(`✅ Scraped ${result.results?.length || 0} profiles`));
       } else {
         const result = await bulkExecute(usernames, action, {
-          delay: parseInt(options.delay), dryRun: options.dryRun, resume: options.resume,
+          delayMs: parseInt(options.delay, 10) || 2000,
+          dryRun: options.dryRun,
+          resume: options.resume,
         });
-        console.log(chalk.green(`✅ Bulk ${action}: ${result.succeeded} succeeded, ${result.failed} failed`));
+        if (result.error) {
+          console.error(chalk.red(`❌ ${result.error}`));
+          process.exitCode = 1;
+        } else {
+          const already = result.alreadyFollowing ? `, ${result.alreadyFollowing} already done` : '';
+          console.log(chalk.green(`✅ Bulk ${action}: ${result.succeeded} succeeded, ${result.failed} failed${already}`));
+        }
       }
-    } catch (error) { console.error(chalk.red(`❌ ${error.message}`)); }
+    } catch (error) { console.error(chalk.red(`❌ ${error.message}`)); } finally {
+      // bulkExecute closes the browser it opened; this covers the paths that
+      // throw before it gets the chance, so the CLI never hangs on a live
+      // Puppeteer singleton after printing its summary.
+      if (action !== 'scrape' && !options.dryRun) {
+        try {
+          const { closeBrowser } = await import('../mcp/local-tools.js');
+          await closeBrowser();
+        } catch { /* nothing to close */ }
+      }
+    }
   });
 
 // ============================================================================
